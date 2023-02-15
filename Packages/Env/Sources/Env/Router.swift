@@ -155,3 +155,41 @@ public class RouterPath: ObservableObject {
     }
   }
 }
+import Combine
+
+@MainActor
+public final class UnobservedRouterPath: ObservableObject {
+    public let routerPath: RouterPath
+    private var cancellable: AnyCancellable?
+    public init(routerPath: RouterPath) {
+        self.routerPath = routerPath
+//        cancellable = self.routerPath.$path.sink { [weak self] _ in
+//            self?.objectWillChange.send()
+//        }
+    }
+
+    public var presentedSheet: SheetDestinations? {
+        get { routerPath.presentedSheet }
+        set { routerPath.presentedSheet = newValue }
+    }
+
+    public func navigate(to: RouterDestinations) {
+        routerPath.navigate(to: to)
+    }
+
+    public func handleStatus(status: AnyStatus, url: URL) -> OpenURLAction.Result {
+        routerPath.handleStatus(status: status, url: url)
+    }
+
+    public func handle(url: URL) -> OpenURLAction.Result {
+        routerPath.handle(url: url)
+    }
+
+    public func navigateToAccountFrom(acct: String, url: URL) async {
+        await routerPath.navigateToAccountFrom(acct: acct, url: url)
+    }
+
+    public func navigateToAccountFrom(url: URL) async {
+        await routerPath.navigateToAccountFrom(url: url)
+    }
+}

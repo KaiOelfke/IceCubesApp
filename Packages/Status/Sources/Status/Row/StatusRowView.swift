@@ -10,6 +10,7 @@ public struct StatusRowView: View {
   @Environment(\.redactionReasons) private var reasons
   @EnvironmentObject private var preferences: UserPreferences
   @EnvironmentObject private var theme: Theme
+  @EnvironmentObject private var routerPath: UnobservedRouterPath
   @StateObject var viewModel: StatusRowViewModel
 
   public init(viewModel: StatusRowViewModel) {
@@ -21,113 +22,116 @@ public struct StatusRowView: View {
   }
 
   public var body: some View {
-    if viewModel.isFiltered, let filter = viewModel.filter {
-      switch filter.filter.filterAction {
-      case .warn:
-        makeFilterView(filter: filter.filter)
-      case .hide:
-        EmptyView()
-      }
-    } else {
-      VStack(alignment: .leading) {
-        if !viewModel.isCompact, theme.avatarPosition == .leading {
-          reblogView
-          replyView
-        }
-        HStack(alignment: .top, spacing: .statusColumnsSpacing) {
-          if !viewModel.isCompact,
-             theme.avatarPosition == .leading,
-             let status: AnyStatus = viewModel.status.reblog ?? viewModel.status
-          {
-            Button {
-              viewModel.routerPath.navigate(to: .accountDetailWithAccount(account: status.account))
-            } label: {
-              AvatarView(url: status.account.avatar, size: .status)
+      let _ = Self._printChanges()
+      return Group {
+          if viewModel.isFiltered, let filter = viewModel.filter {
+            switch filter.filter.filterAction {
+            case .warn:
+              makeFilterView(filter: filter.filter)
+            case .hide:
+              EmptyView()
             }
-          }
-          VStack(alignment: .leading) {
-            if !viewModel.isCompact, theme.avatarPosition == .top {
-              reblogView
-              replyView
+          } else {
+            VStack(alignment: .leading) {
+              if !viewModel.isCompact, theme.avatarPosition == .leading {
+                reblogView
+                replyView
+              }
+              HStack(alignment: .top, spacing: .statusColumnsSpacing) {
+                if !viewModel.isCompact,
+                   theme.avatarPosition == .leading,
+                   let status: AnyStatus = viewModel.status.reblog ?? viewModel.status
+                {
+                  Button {
+                    viewModel.routerPath.navigate(to: .accountDetailWithAccount(account: status.account))
+                  } label: {
+                    AvatarView(url: status.account.avatar, size: .status)
+                  }
+                }
+                VStack(alignment: .leading) {
+                  if !viewModel.isCompact, theme.avatarPosition == .top {
+                    reblogView
+                    replyView
+                  }
+                  statusView
+                  if viewModel.showActions, theme.statusActionsDisplay != .none {
+                    StatusActionsView(viewModel: viewModel)
+                      .padding(.top, 8)
+                      .tint(viewModel.isFocused ? theme.tintColor : .gray)
+                      .contentShape(Rectangle())
+                      .onTapGesture {
+                        viewModel.navigateToDetail()
+                      }
+                  }
+                }
+              }
             }
-            statusView
-            if viewModel.showActions, theme.statusActionsDisplay != .none {
-              StatusActionsView(viewModel: viewModel)
-                .padding(.top, 8)
-                .tint(viewModel.isFocused ? theme.tintColor : .gray)
+            .onAppear {
+              viewModel.markSeen()
+              if reasons.isEmpty {
+                if !viewModel.isCompact, viewModel.embeddedStatus == nil {
+                  Task {
+                    await viewModel.loadEmbeddedStatus()
+                  }
+                }
+                if preferences.autoExpandSpoilers == true && viewModel.displaySpoiler {
+                  viewModel.displaySpoiler = false
+                }
+              }
+            }
+            .contextMenu {
+              contextMenu
+            }
+            .listRowBackground(viewModel.highlightRowColor)
+            .swipeActions(edge: .trailing) {
+              if !viewModel.isCompact {
+                trailingSwipeActions
+              }
+            }
+            .swipeActions(edge: .leading) {
+              if !viewModel.isCompact {
+                leadingSwipeActions
+              }
+            }
+            .listRowInsets(.init(top: 12,
+                                 leading: .layoutPadding,
+                                 bottom: 12,
+                                 trailing: .layoutPadding))
+            .accessibilityElement(children: viewModel.isFocused ? .contain : .combine)
+            .accessibilityActions {
+              accesibilityActions
+            }
+            .background {
+              Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture {
                   viewModel.navigateToDetail()
                 }
             }
-          }
-        }
-      }
-      .onAppear {
-        viewModel.markSeen()
-        if reasons.isEmpty {
-          if !viewModel.isCompact, viewModel.embeddedStatus == nil {
-            Task {
-              await viewModel.loadEmbeddedStatus()
+            .overlay {
+              if viewModel.isLoadingRemoteContent {
+                remoteContentLoadingView
+              }
+            }
+            .alert(isPresented: $viewModel.showDeleteAlert, content: {
+              Alert(
+                title: Text("status.action.delete.confirm.title"),
+                message: Text("status.action.delete.confirm.message"),
+                primaryButton: .destructive(
+                  Text("status.action.delete"))
+                {
+                  Task {
+                    await viewModel.delete()
+                  }
+                },
+                secondaryButton: .cancel()
+              )
+            })
+            .alignmentGuide(.listRowSeparatorLeading) { _ in
+              -100
             }
           }
-          if preferences.autoExpandSpoilers == true && viewModel.displaySpoiler {
-            viewModel.displaySpoiler = false
-          }
-        }
       }
-      .contextMenu {
-        contextMenu
-      }
-      .listRowBackground(viewModel.highlightRowColor)
-      .swipeActions(edge: .trailing) {
-        if !viewModel.isCompact {
-          trailingSwipeActions
-        }
-      }
-      .swipeActions(edge: .leading) {
-        if !viewModel.isCompact {
-          leadingSwipeActions
-        }
-      }
-      .listRowInsets(.init(top: 12,
-                           leading: .layoutPadding,
-                           bottom: 12,
-                           trailing: .layoutPadding))
-      .accessibilityElement(children: viewModel.isFocused ? .contain : .combine)
-      .accessibilityActions {
-        accesibilityActions
-      }
-      .background {
-        Color.clear
-          .contentShape(Rectangle())
-          .onTapGesture {
-            viewModel.navigateToDetail()
-          }
-      }
-      .overlay {
-        if viewModel.isLoadingRemoteContent {
-          remoteContentLoadingView
-        }
-      }
-      .alert(isPresented: $viewModel.showDeleteAlert, content: {
-        Alert(
-          title: Text("status.action.delete.confirm.title"),
-          message: Text("status.action.delete.confirm.message"),
-          primaryButton: .destructive(
-            Text("status.action.delete"))
-          {
-            Task {
-              await viewModel.delete()
-            }
-          },
-          secondaryButton: .cancel()
-        )
-      })
-      .alignmentGuide(.listRowSeparatorLeading) { _ in
-        -100
-      }
-    }
   }
 
   @ViewBuilder
@@ -135,7 +139,7 @@ public struct StatusRowView: View {
     // Add the individual mentions as accessibility actions
     ForEach(viewModel.status.mentions, id: \.id) { mention in
       Button("@\(mention.username)") {
-        viewModel.routerPath.navigate(to: .accountDetail(id: mention.id))
+        routerPath.navigate(to: .accountDetail(id: mention.id))
       }
     }
 
@@ -146,7 +150,7 @@ public struct StatusRowView: View {
     }
 
     Button("@\(viewModel.status.account.username)") {
-      viewModel.routerPath.navigate(to: .accountDetail(id: viewModel.status.account.id))
+      routerPath.navigate(to: .accountDetail(id: viewModel.status.account.id))
     }
 
     contextMenu
@@ -275,7 +279,7 @@ public struct StatusRowView: View {
           EmojiTextApp(status.content, emojis: status.emojis, language: status.language)
             .font(.scaledBody)
             .environment(\.openURL, OpenURLAction { url in
-              viewModel.routerPath.handleStatus(status: status, url: url)
+              routerPath.handleStatus(status: status, url: url)
             })
           Spacer()
         }
@@ -525,7 +529,7 @@ public struct StatusRowView: View {
   private func makeSwipeButtonForRouterPath(action: StatusAction, destination: SheetDestinations) -> some View {
     Button {
       HapticManager.shared.fireHaptic(of: .notification(.success))
-      viewModel.routerPath.presentedSheet = destination
+      routerPath.presentedSheet = destination
     } label: {
       makeSwipeLabel(action: action, style: preferences.swipeActionsIconStyle)
     }

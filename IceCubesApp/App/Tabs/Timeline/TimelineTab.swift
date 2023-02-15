@@ -13,7 +13,7 @@ struct TimelineTab: View {
   @EnvironmentObject private var currentAccount: CurrentAccount
   @EnvironmentObject private var preferences: UserPreferences
   @EnvironmentObject private var client: Client
-  @StateObject private var routerPath = RouterPath()
+  @StateObject private var routerPath: RouterPath
   @Binding var popToRootTab: Tab
 
   @State private var didAppear: Bool = false
@@ -24,14 +24,20 @@ struct TimelineTab: View {
 
   private let canFilterTimeline: Bool
 
+  private let unobservedRouterPath: UnobservedRouterPath
+
   init(popToRootTab: Binding<Tab>, timeline: TimelineFilter? = nil) {
     canFilterTimeline = timeline == nil
+    let routerPath = RouterPath()
+    self._routerPath = .init(wrappedValue: routerPath)
     self.timeline = timeline ?? .home
     _popToRootTab = popToRootTab
+    self.unobservedRouterPath = UnobservedRouterPath(routerPath: routerPath)
   }
 
   var body: some View {
-    NavigationStack(path: $routerPath.path) {
+    let _ = Self._printChanges()
+    return NavigationStack(path: $routerPath.path) {
       TimelineView(timeline: $timeline, scrollToTopSignal: $scrollToTopSignal)
         .withAppRouter()
         .withSheetDestinations(sheetDestinations: $routerPath.presentedSheet)
@@ -91,6 +97,7 @@ struct TimelineTab: View {
     }
     .withSafariRouter()
     .environmentObject(routerPath)
+    .environmentObject(unobservedRouterPath)
   }
 
   @ViewBuilder
